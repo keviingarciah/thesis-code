@@ -77,3 +77,39 @@ def process_images(input_folder, output_folder, csv_path, color_range):
         writer.writerows(all_features)
 
     print("Procesamiento completado y CSV generado.")
+
+def get_contours_and_features(input_folder, color_range, min_area=500, max_area=100000):
+    images = [f for f in os.listdir(input_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+
+    all_features = []
+    all_contours = []
+    all_img_names = []
+
+    for image_file in images:
+        img_name = os.path.splitext(image_file)[0]
+        img_path = os.path.join(input_folder, image_file)
+        image = cv2.imread(img_path)
+        if image is None:
+            print(f"Error cargando {img_path}")
+            continue
+
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        lower, upper = color_range
+        mask = cv2.inRange(hsv, lower, upper)
+        kernel = np.ones((5, 5), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        filtered_contours = filter_contours(contours, min_area, max_area)
+
+        features = extract_features_from_contours(filtered_contours)
+
+        for cnt, f in zip(filtered_contours, features):
+            all_contours.append(cnt)
+            all_features.append(f)
+            all_img_names.append(img_name)
+
+        print(f"{image_file}: {len(filtered_contours)} objetos detectados")
+
+    return all_img_names, all_contours, all_features

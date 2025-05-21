@@ -1,6 +1,8 @@
 from src.archeo_detection import process_images, get_contours_and_features
 from src.kmeans_clustering import load_features, scale_features, elbow_method, run_kmeans, save_clustered_data, plot_clusters, save_clusters_with_centroids
+from src.qgis_export import convert_to_geojson
 import numpy as np
+import pandas as pd
 
 def main():
     input_folder = './data/dataset_tikal/'
@@ -8,15 +10,25 @@ def main():
     csv_path = './data/features.csv'
     clustered_csv = './data/features_clustered.csv'
     georef_csv = './data/features_georeferenced.csv'
+    geojson_path = './data/features_clusters.geojson'
 
-    color_range = (np.array([45, 0, 163]), np.array([179, 255, 255]))  # Ajustar si necesario
+    color_range = (np.array([45, 0, 163]), np.array([179, 255, 255]))  
+
+    image_reference = {
+        '1': {'top_left_x': 500000, 'top_left_y': 1700000, 'resolution': 0.05},
+        '2': {'top_left_x': 500050, 'top_left_y': 1700000, 'resolution': 0.05},
+        '3': {'top_left_x': 500100, 'top_left_y': 1700000, 'resolution': 0.05},
+        '4': {'top_left_x': 500150, 'top_left_y': 1700000, 'resolution': 0.05}
+    }
 
     while True:
         print("\nMenú Principal:")
         print("1. Procesar imágenes y extraer características (OpenCV)")
         print("2. Ejecutar clustering K-Means")
-        print("3. Pipeline completo: detección + clustering + CSV georreferenciado")
-        print("4. Salir")
+        print("3. Exportar GeoJSON para QGIS desde CSV georreferenciado")
+        print("4. Pipeline completo: detección + clustering + GeoJSON para QGIS")
+        print("5. Salir")
+
         option = input("Selecciona una opción: ")
 
         if option == '1':
@@ -32,8 +44,10 @@ def main():
             save_clustered_data(df, clusters, clustered_csv)
             plot_clusters(df)
 
-
         elif option == '3':
+            convert_to_geojson(georef_csv, geojson_path, image_reference)
+
+        elif option == '4':
             # Pipeline completo
             img_names, contours, features = get_contours_and_features(input_folder, color_range)
             scaled_features, scaler = scale_features(np.array(features))
@@ -42,14 +56,14 @@ def main():
             k = int(input("Ingresa el número óptimo de clusters (k) según gráfico: "))
             clusters, kmeans_model = run_kmeans(scaled_features, k)
 
-            # Guardar CSV georreferenciado para QGIS
             save_clusters_with_centroids(img_names, contours, clusters, georef_csv)
 
-            import pandas as pd
             df_geo = pd.read_csv(georef_csv)
             plot_clusters(df_geo)
 
-        elif option == '4':
+            convert_to_geojson(georef_csv, geojson_path, image_reference)
+
+        elif option == '5':
             print("Saliendo...")
             break
 

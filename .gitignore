@@ -166,3 +166,5 @@ cython_debug/
 /assets/dataset_glifos/labels/train/*
 
 .python-version
+
+.DS_Store

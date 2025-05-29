@@ -7,7 +7,9 @@ import pandas as pd
 
 def main():
     # input_folder = './data/dataset_tikal/' Structures
-    input_folder = './data/dataset_materials/'
+    # input_folder = './data/dataset_materials/'
+
+    input_folder = './data/dataset/'
     output_folder = './data/results/'
     csv_path = './data/features.csv'
     clustered_csv = './data/features_clustered.csv'
@@ -15,8 +17,8 @@ def main():
     geojson_path = './data/features_clusters.geojson'
 
     # color_range = (np.array([45, 0, 163]), np.array([179, 255, 255])) Structures
-    color_range = (np.array([0, 0, 154]), np.array([179, 149, 255])) 
     # color_range = (np.array([0, 0, 0]), np.array([180, 255, 90]))  
+    color_range = (np.array([0, 19, 0]), np.array([35, 255, 255]))  
 
     image_reference = {
         '1': {'top_left_x': 500000, 'top_left_y': 1700000, 'resolution': 0.05},

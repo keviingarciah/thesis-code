@@ -25,24 +25,26 @@ def scale_features(features):
 def elbow_method(scaled_features, max_k=10):
     ensure_plot_dir()
 
+    n_samples = len(scaled_features)
+    max_k = min(max_k, n_samples)  # Evitar k > número de muestras
+
     inertias = []
-    for k in range(1, max_k+1):
+    for k in range(1, max_k + 1):
         km = KMeans(n_clusters=k, random_state=42)
         km.fit(scaled_features)
         inertias.append(km.inertia_)
+
     plt.figure()
-    plt.plot(range(1, max_k+1), inertias, 'bo-')
+    plt.plot(range(1, max_k + 1), inertias, 'bo-')
     plt.xlabel('Número de Clusters (k)')
     plt.ylabel('Inercia')
     plt.title('Método del Codo para k óptimo')
     plt.grid(True)
-    
-    # Guardar gráfica
+
     plot_path = os.path.join(PLOT_DIR, 'elbow_method.png')
     plt.savefig(plot_path)
     print(f"Gráfica del método del codo guardada en {plot_path}")
     plt.show()
-
 
 def run_kmeans(scaled_features, n_clusters):
     kmeans = KMeans(n_clusters=n_clusters, random_state=42)

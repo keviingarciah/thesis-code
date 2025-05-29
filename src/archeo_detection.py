@@ -2,9 +2,10 @@ import os
 import cv2
 import numpy as np
 import csv
-from src.utils import resize_image
+# from src.utils import resize_image # Assuming resize_image is defined elsewhere if needed
 
 def filter_contours(contours, min_area=500, max_area=100000):
+    """Filters contours based on area."""
     filtered = []
     for cnt in contours:
         area = cv2.contourArea(cnt)
@@ -13,103 +14,193 @@ def filter_contours(contours, min_area=500, max_area=100000):
     return filtered
 
 def save_image(folder, filename, img):
+    """Saves an image to a specified folder, creating the folder if it doesn't exist."""
     if not os.path.exists(folder):
         os.makedirs(folder)
     cv2.imwrite(os.path.join(folder, filename), img)
+    print(f"  Saved: {os.path.join(folder, filename)}") # Added print statement for confirmation
 
 def extract_features_from_contours(contours):
+    """Extracts area, perimeter, and centroid from contours."""
     features = []
     for cnt in contours:
         area = cv2.contourArea(cnt)
         perimeter = cv2.arcLength(cnt, True)
         M = cv2.moments(cnt)
-        cx = int(M['m10']/M['m00']) if M['m00'] != 0 else 0
-        cy = int(M['m01']/M['m00']) if M['m00'] != 0 else 0
+        cx = 0
+        cy = 0
+        if M['m00'] != 0:
+            cx = int(M['m10'] / M['m00'])
+            cy = int(M['m01'] / M['m00'])
+        else:
+            # Handle cases where contour area is zero (e.g., a line)
+            # You might want to find the bounding box center or skip
+            # For now, just using 0,0 but this might need adjustment based on your needs
+            print(f"  Warning: Contour with zero area found. Centroid set to (0,0). Area: {area}")
+
         features.append([area, perimeter, cx, cy])
     return features
 
 def process_images(input_folder, output_folder, csv_path, color_range):
+    """
+    Processes images in a folder to detect objects based on color,
+    extract features from their contours, and save results.
+    """
     images = [f for f in os.listdir(input_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+
+    if not images:
+        print(f"No images found in {input_folder}. Please check the path and file extensions.")
+        return
 
     all_features = []
     for image_file in images:
+        print(f"\nProcessing image: {image_file}...")
         img_name = os.path.splitext(image_file)[0]
-        img_folder = os.path.join(output_folder, img_name)
+        img_folder = os.path.join(output_folder, img_name) # Output subfolder for each image
+
         if not os.path.exists(img_folder):
             os.makedirs(img_folder)
 
         img_path = os.path.join(input_folder, image_file)
         image = cv2.imread(img_path)
+
         if image is None:
-            print(f"Error cargando {img_path}")
+            print(f"  Error: Could not load image {img_path}. Skipping.")
             continue
 
+        # 1. Convert to HSV
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        save_image(img_folder, 'hsv.png', hsv)
+        save_image(img_folder, '01_hsv.png', hsv)
 
+        # 2. Create mask based on color range
         lower, upper = color_range
         mask = cv2.inRange(hsv, lower, upper)
-        save_image(img_folder, 'mask.png', mask)
+        save_image(img_folder, '02_mask_initial.png', mask)
 
-        kernel = np.ones((5, 5), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        save_image(img_folder, 'mask_morph.png', mask)
+        # Ensure mask is uint8 (cv2.inRange should already return this, but good to be sure)
+        if mask.dtype != np.uint8:
+            mask = mask.astype(np.uint8)
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        filtered_contours = filter_contours(contours)
+        # 3. Morphological operations to clean up the mask
+        kernel = np.ones((5, 5), np.uint8) # 5x5 kernel
+        # MORPH_CLOSE fills small holes in the object
+        mask_closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        save_image(img_folder, '03_mask_closed.png', mask_closed)
+        # MORPH_OPEN removes small noise from the background
+        mask_opened = cv2.morphologyEx(mask_closed, cv2.MORPH_OPEN, kernel)
+        save_image(img_folder, '04_mask_morph_final.png', mask_opened)
 
-        features = extract_features_from_contours(filtered_contours)
-        # Añadir etiqueta de imagen para seguimiento
-        for f in features:
-            all_features.append([img_name] + f)
+        # 4. Find contours
+        # Using mask_opened which is the cleaned-up version
+        # cv2.findContours can modify the source image in older OpenCV versions,
+        # though it's less of an issue now. Using a copy is safest if mask_opened is needed later.
+        # For OpenCV 4.x and later, it returns (contours, hierarchy)
+        # For OpenCV 3.x, it returns (image, contours, hierarchy)
+        # The underscore `_` handles the potential extra return value.
+        contours, hierarchy = cv2.findContours(mask_opened.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # Dibujar contornos
-        cv2.drawContours(image, filtered_contours, -1, (0, 255, 0), 2)
-        save_image(img_folder, 'contours.png', image)
+        print(f"  Raw contours found (before filtering): {len(contours)}")
 
-        print(f"{image_file}: {len(filtered_contours)} objetos detectados")
+        # --- CRITICAL DEBUGGING STEP ---
+        # Draw ALL raw contours found (before filtering) to see what's detected
+        img_with_raw_contours = image.copy()
+        cv2.drawContours(img_with_raw_contours, contours, -1, (0, 0, 255), 2) # Draw all raw contours in RED
+        save_image(img_folder, '05_raw_contours.png', img_with_raw_contours)
+        # --- END DEBUGGING STEP ---
 
-    # Guardar CSV
-    with open(csv_path, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['image', 'area', 'perimeter', 'centroid_x', 'centroid_y'])
-        writer.writerows(all_features)
+        # Print areas of raw contours
+        if contours:
+            print("  Areas of raw contours before filtering:")
+            for i, cnt in enumerate(contours):
+                area = cv2.contourArea(cnt)
+                print(f"    Raw Contour {i}: area = {area:.2f}")
+        else:
+            print("  No raw contours detected by cv2.findContours.")
 
-    print("Procesamiento completado y CSV generado.")
+        print(f"  ℹ️  Using raw contours directly for feature extraction and drawing.")
+        # 5. Filter contours based on area
+        # Make sure these min/max_area values are appropriate for your objects!
+        # This is a common place where all contours might be discarded.
+        #current_min_area = 10  # Example: Adjusted from your original process_images
+        #current_max_area = 310000 # Example
+        #print(f"  Filtering contours with min_area={current_min_area}, max_area={current_max_area}")
+        #filtered_contours = filter_contours(contours, min_area=current_min_area, max_area=current_max_area)
+        contours_to_process = contours
+
+        # 6. Extract features and store them
+        # This will only run if filtered_contours is not empty
+        features = extract_features_from_contours(contours_to_process)
+        for f_idx, f_val in enumerate(features):
+            # Prepend image name and contour index to each feature set
+            all_features.append([img_name, f_idx] + f_val)
+
+
+        # 7. Draw filtered contours on the original image
+        if contours_to_process:
+            output_img_final = image.copy()
+            cv2.drawContours(output_img_final, contours_to_process, -1, (0, 255, 0), 3) # Filtered in GREEN
+            save_image(img_folder, '06_filtered_contours_final.png', output_img_final)
+            print(f"  ✔️  {len(contours_to_process)} objects (contours) detected and drawn in {image_file}.")
+        else:
+            print(f"  ⚠️  No contours remained after filtering for {image_file}.")
+            # Save the original image if no contours are drawn, for reference
+            save_image(img_folder, '06_no_filtered_contours.png', image.copy())
+
+
+    # 8. Save all extracted features to a CSV file
+    if all_features:
+        # Added 'contour_index' to the header
+        header = ['image_filename', 'contour_index', 'area', 'perimeter', 'centroid_x', 'centroid_y']
+        with open(csv_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(header)
+            writer.writerows(all_features)
+        print(f"\n✅ All processing completed. Features saved to {csv_path}")
+    else:
+        print("\n❌ No features were extracted from any image (possibly no contours detected or all filtered out). CSV not generated.")
 
 def get_contours_and_features(input_folder, color_range, min_area=500, max_area=100000):
+    """
+    A separate function to get contours and features, perhaps for a different workflow.
+    This is similar to parts of process_images but returns the data directly.
+    """
     images = [f for f in os.listdir(input_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
 
-    all_features = []
-    all_contours = []
     all_img_names = []
+    all_contours_data = [] # Storing contour points can be memory intensive if not needed.
+    all_features_data = []
 
     for image_file in images:
         img_name = os.path.splitext(image_file)[0]
         img_path = os.path.join(input_folder, image_file)
         image = cv2.imread(img_path)
         if image is None:
-            print(f"Error cargando {img_path}")
+            print(f"Error loading {img_path}")
             continue
 
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         lower, upper = color_range
         mask = cv2.inRange(hsv, lower, upper)
-        kernel = np.ones((5, 5), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        
+        if mask.dtype != np.uint8:
+            mask = mask.astype(np.uint8)
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        filtered_contours = filter_contours(contours, min_area, max_area)
+        kernel = np.ones((5, 5), np.uint8)
+        mask_closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        mask_opened = cv2.morphologyEx(mask_closed, cv2.MORPH_OPEN, kernel)
+
+        contours, _ = cv2.findContours(mask_opened.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Using the min_area and max_area passed to this function
+        filtered_contours = filter_contours(contours, min_area=min_area, max_area=max_area)
 
         features = extract_features_from_contours(filtered_contours)
 
         for cnt, f in zip(filtered_contours, features):
-            all_contours.append(cnt)
-            all_features.append(f)
-            all_img_names.append(img_name)
+            all_contours_data.append(cnt) # Storing actual contour points
+            all_features_data.append(f)
+            all_img_names.append(img_name) # Image name for each detected contour
 
-        print(f"{image_file}: {len(filtered_contours)} objetos detectados")
+        print(f"{image_file}: {len(filtered_contours)} objects detected using get_contours_and_features")
 
-    return all_img_names, all_contours, all_features
+    return all_img_names, all_contours_data, all_features_data

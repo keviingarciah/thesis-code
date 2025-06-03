@@ -88,11 +88,11 @@ def plot_ann_results(results_df, output_path='plots/ann_results.png'):
 
 
 def generate_image_summary_table(df, output_csv='plots/image_summary.csv'):
-    if 'image' not in df.columns:
+    if 'image_filename' not in df.columns:
         print("⚠️ No se encontró la columna 'image' para generar la tabla de resumen por imagen.")
         return None
 
-    summary = df.groupby('image').agg({
+    summary = df.groupby('image_filename').agg({
         'area': ['count', 'mean', 'std'],
         'perimeter': 'mean'
     }).reset_index()

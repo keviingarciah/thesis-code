@@ -7,7 +7,7 @@ def nothing(x):
 
 def main():
     # Ruta a una imagen de ejemplo
-    image_path = './data/dataset/3.png'  # Cambia este nombre si tu imagen se llama diferente
+    image_path = './data/dataset/1.png'  # Cambia este nombre si tu imagen se llama diferente
     if not os.path.exists(image_path):
         print(f'No se encuentra la imagen: {image_path}')
         return

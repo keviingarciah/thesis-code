@@ -4,8 +4,18 @@ import numpy as np
 import csv
 # from src.utils import resize_image # Assuming resize_image is defined elsewhere if needed
 
-def filter_contours(contours, min_area=500, max_area=100000):
-    """Filters contours based on area."""
+def filter_contours(contours, min_area=50, max_area=5000):
+    """
+    Filtra contornos basado en área.
+    
+    Args:
+        contours: Lista de contornos a filtrar
+        min_area: Área mínima permitida (default: 50 píxeles cuadrados)
+        max_area: Área máxima permitida (default: 5000 píxeles cuadrados)
+    
+    Returns:
+        Lista de contornos filtrados
+    """
     filtered = []
     for cnt in contours:
         area = cv2.contourArea(cnt)
@@ -56,7 +66,7 @@ def process_images(input_folder, output_folder, csv_path, color_range):
     for image_file in images:
         print(f"\nProcessing image: {image_file}...")
         img_name = os.path.splitext(image_file)[0]
-        img_folder = os.path.join(output_folder, img_name) # Output subfolder for each image
+        img_folder = os.path.join(output_folder, img_name) 
 
         if not os.path.exists(img_folder):
             os.makedirs(img_folder)
@@ -91,22 +101,14 @@ def process_images(input_folder, output_folder, csv_path, color_range):
         save_image(img_folder, '04_mask_morph_final.png', mask_opened)
 
         # 4. Find contours
-        # Using mask_opened which is the cleaned-up version
-        # cv2.findContours can modify the source image in older OpenCV versions,
-        # though it's less of an issue now. Using a copy is safest if mask_opened is needed later.
-        # For OpenCV 4.x and later, it returns (contours, hierarchy)
-        # For OpenCV 3.x, it returns (image, contours, hierarchy)
-        # The underscore `_` handles the potential extra return value.
         contours, hierarchy = cv2.findContours(mask_opened.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         print(f"  Raw contours found (before filtering): {len(contours)}")
 
-        # --- CRITICAL DEBUGGING STEP ---
-        # Draw ALL raw contours found (before filtering) to see what's detected
+        # Draw ALL raw contours found (before filtering)
         img_with_raw_contours = image.copy()
         cv2.drawContours(img_with_raw_contours, contours, -1, (0, 0, 255), 2) # Draw all raw contours in RED
         save_image(img_folder, '05_raw_contours.png', img_with_raw_contours)
-        # --- END DEBUGGING STEP ---
 
         # Print areas of raw contours
         if contours:
@@ -117,35 +119,36 @@ def process_images(input_folder, output_folder, csv_path, color_range):
         else:
             print("  No raw contours detected by cv2.findContours.")
 
-        print(f"  ℹ️  Using raw contours directly for feature extraction and drawing.")
         # 5. Filter contours based on area
-        # Make sure these min/max_area values are appropriate for your objects!
-        # This is a common place where all contours might be discarded.
-        #current_min_area = 10  # Example: Adjusted from your original process_images
-        #current_max_area = 310000 # Example
-        #print(f"  Filtering contours with min_area={current_min_area}, max_area={current_max_area}")
-        #filtered_contours = filter_contours(contours, min_area=current_min_area, max_area=current_max_area)
-        contours_to_process = contours
+        min_area = 50  # Ajusta estos valores según tus necesidades
+        max_area = 5000  # Ajusta estos valores según tus necesidades
+        print(f"  Filtering contours with min_area={min_area}, max_area={max_area}")
+        filtered_contours = filter_contours(contours, min_area=min_area, max_area=max_area)
+        
+        print(f"  Contours after filtering: {len(filtered_contours)}")
+        
+        if filtered_contours:
+            print("  Areas of filtered contours:")
+            for i, cnt in enumerate(filtered_contours):
+                area = cv2.contourArea(cnt)
+                print(f"    Filtered Contour {i}: area = {area:.2f}")
 
         # 6. Extract features and store them
-        # This will only run if filtered_contours is not empty
-        features = extract_features_from_contours(contours_to_process)
+        features = extract_features_from_contours(filtered_contours)
         for f_idx, f_val in enumerate(features):
             # Prepend image name and contour index to each feature set
             all_features.append([img_name, f_idx] + f_val)
 
-
         # 7. Draw filtered contours on the original image
-        if contours_to_process:
+        if filtered_contours:
             output_img_final = image.copy()
-            cv2.drawContours(output_img_final, contours_to_process, -1, (0, 255, 0), 3) # Filtered in GREEN
+            cv2.drawContours(output_img_final, filtered_contours, -1, (0, 255, 0), 3) # Filtered in GREEN
             save_image(img_folder, '06_filtered_contours_final.png', output_img_final)
-            print(f"  ✔️  {len(contours_to_process)} objects (contours) detected and drawn in {image_file}.")
+            print(f"  ✔️  {len(filtered_contours)} objects (contours) detected and drawn in {image_file}.")
         else:
             print(f"  ⚠️  No contours remained after filtering for {image_file}.")
             # Save the original image if no contours are drawn, for reference
             save_image(img_folder, '06_no_filtered_contours.png', image.copy())
-
 
     # 8. Save all extracted features to a CSV file
     if all_features:

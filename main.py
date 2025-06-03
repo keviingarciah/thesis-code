@@ -2,8 +2,6 @@ from src.archeo_detection import process_images, get_contours_and_features
 from src.kmeans_clustering import process_all_images
 from src.qgis_export import convert_to_geojson
 from src.spatial_analysis import run_spatial_analysis
-import numpy as np
-import pandas as pd
 from src.utils import generate_color_range
 
 def main():
